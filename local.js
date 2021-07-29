@@ -140,38 +140,26 @@ class Local{
         return this._makeObject(content);
     }
     
-    _addIndex(filepath, content){
-        const blobIdFromContent = this._makeBlob(content);
-        const blobIdFromIndex = this._getObjectIdFromIndexByFilepath(filepath);
+    _addIndex(filename, blobId){
+        fs.appendFileSync(this._indexFile, `\n${filename} ${blobId}`);
         
-        // 새로 만든 파일이다.
-        if (blobIdFromIndex === null){
-            fs.appendFileSync(this._indexFile, `\n${filepath} ${blobIdFromContent}`);
-        }
-        // 변한게 없다.
-        else if (blobIdFromIndex === blobIdFromContent){
-            console.log(`${filepath}는 변경된 점이 없습니다.`);
-        }
-        // 변했다.
-        else{
-            this._modifyIndex(filepath, content);
-        }
+        return true;
     }
     // index의 filepath 파일의 objectId를 변경한다.
     // 딱 그 위치만 덮어쓰기하면 될 것같은데, 아직 js로는 파일 스트림을 잘 못다루겠다...
-    _modifyIndex(filepath, newContent){
+    _modifyIndex(filename, newBlobId){
         const data = this._getStringFromIndex();
         
         const newData = data.split("\n").map(line => {
             const array = line.split(" ");
-            const indexFilepath = array.slice(0, -1).join(" ");
+            const indexFilename = array.slice(0, -1).join(" ");
             
-            if (indexFilepath !== filepath)
+            if (indexFilename !== filename)
                 return line;
             
-            const blob = this._makeBlob(newContent);
+            const blob = this._makeBlob(newBlobId);
             
-            return `${indexFilepath} ${blob}`;
+            return `${indexFilename} ${blob}`;
         })
         .join("\n");
     
@@ -191,7 +179,7 @@ class Local{
     }
     // Index 파일로부터 Filepath에 해당하는 objectId를 가져온다.
     // 없다면 null 반환.
-    _getObjectIdFromIndexByFilepath(filepath){
+    _getObjectIdFromIndexByFilename(filename){
         const data = this._getStringFromIndex();
         
         
@@ -199,7 +187,7 @@ class Local{
             const array = line.split(" ");
             const indexFilepath = array.slice(0, -1).join(" ");
             
-            if (indexFilepath === filepath)
+            if (indexFilepath === filename)
                 return true;
             return false;
         }).split(" ");
@@ -209,6 +197,26 @@ class Local{
             
         // 가장 마지막 값이 blob의 obj id이다.
         return lineArray[lineArray.length - 1];
+    }
+    add2(filename){
+        const filepath = path.join(this._dir, filename);
+        const content = fs.readFileSync(filepath);
+        
+        const blobIdFromContent = this._makeBlob(content);
+        const blobIdFromIndex = this._getObjectIdFromIndexByFilepath(filename);
+        
+        // 새로 만든 파일이다.
+        if (blobIdFromIndex === null){
+            this._addIndex(filename, blobIdFromContent);
+        }
+        // 변한게 없다.
+        else if (blobIdFromIndex === blobIdFromContent){
+            console.log(`${filename} 파일은 변경된 점이 없습니다.`);
+        }
+        // 변했다.
+        else{
+            this._modifyIndex(filename, blobIdFromContent);
+        }
     }
     
     add(name){
