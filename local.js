@@ -122,11 +122,22 @@ class Local{
         return this._makeObject(`blob\n${content}`);
     }
     
-    // Index를 바탕으로 Tree를 만들어냄.
+    // Index를 바탕으로 Tree를 만들고, object Id를 반환
     _makeTree(){
         const indexString = this._getStringFromIndex();
         
         return this._makeObject(`tree\n${indexString}`);
+    }
+    
+    // commit 파일을 만들고, object Id를 반환.
+    _makeCommit(treeObjId, log, parent = ""){
+        let content = `commit\ntree ${treeObjId}\n`;
+        if (parent.length > 0){
+            content += `parent ${parent}\n`;
+        }
+        content += `\n${log}`;
+        
+        return this._makeObject(content);
     }
     
     _addIndex(filepath, content){
