@@ -82,7 +82,9 @@ class Local{
         file.setContent(content);
         file.setSize(stat.size);
         file.setTime(stat.mtime);
-        file.setStatus("Modified");
+        if (file.getStatus() !== "Untracked"){
+            file.setStatus("Modified");
+        }
         file.print();
         
         return true;
