@@ -114,7 +114,6 @@ class Local{
             files: this._index.map(ele => {
                     const workFile = this._files.find(workEle => workEle.getName() === ele.getName());
                     workFile.setStatus("Unmodified");
-                    workFile.setTime(current);
                     
                     return new File({name: ele.getName(), content: ele.getContent(), 
                                      time: current, size: ele.getSize(), status: "Unmodified"});
