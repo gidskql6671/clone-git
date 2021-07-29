@@ -11,12 +11,16 @@ class Local{
         this._dir = path.join(dir, name);
         this._repoPath = path.join(this._dir, ".git", "objects");
         this._logPath = path.join(this._dir, ".git", "logs");
+        this._remoteDir = path.join(this._dir, ".remote");
         
         this._files = this._getWorkingDirFiles();
         this._index = [];
         this._repo = this._getRepositoryFiles();
         
         this._remote = null;
+        if (fs.existsSync(this._remoteDir)){
+            this._remote = new Remote(this._remoteDir);
+        }
     }
     
     _getWorkingDirFiles(){
@@ -134,8 +138,7 @@ class Local{
     }
     push(){
         if (this._remote === null){
-            const remoteDir = path.join(this._dir, ".remote");
-            this._remote = new Remote(remoteDir);
+            this._remote = new Remote(this._remoteDir);
         }
         
         this._remote.push(this._getRepositoryFiles());
@@ -183,6 +186,15 @@ class Local{
             });
             console.log("");
         });
+    }
+    printRemote(){
+        if (this._remote === null){
+            console.log("해당 저장소가 없습니다.");
+            return false;
+        }
+        
+        this._remote.print();
+        return true;
     }
 }
 

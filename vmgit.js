@@ -19,7 +19,10 @@ async function vmgit(){
             
             git.init(repoName);
         }
-        else if (input === "status"){
+        else if (input === "status remote"){
+            git.statusRemote();
+        }
+        else if (input.startsWith("status")){
             git.status();
         }
         else if (input.startsWith("checkout")){

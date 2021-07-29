@@ -26,6 +26,10 @@ class Remote{
                         const filePath = path.join(this._repoPath, filename);
                         return JSON.parse(fs.readFileSync(filePath));
                     })
+                    .map(commit => {
+                        commit.files = commit.files.map(file => new File(file));
+                        return commit;
+                    })
     }
     
     push(commits){

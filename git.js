@@ -58,6 +58,15 @@ class Git{
             this._curLocalRepo.printAll();
         }
     }
+    statusRemote(){
+        if (!this.isCheckouted()){
+            console.log("체크아웃을 먼저 해주세요.");
+            return false;
+        }
+        else{
+            this._curLocalRepo.printRemote();
+        }
+    }
     
     checkout(repoName){
         if (repoName === ""){
