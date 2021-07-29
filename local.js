@@ -2,7 +2,7 @@ const path = require('path')
 const fs = require('fs');
 const File = require('./file.js');
 const Remote = require('./remote.js');
-const { time } = require('console');
+const { hash } = require('./hash.js');
 
 
 class Local{
@@ -102,10 +102,10 @@ class Local{
         return true;
     }
     
-    // Blob 파일을 만들고, object Id를 반환.
-    _makeBlob(content){
-        // sha1을 적용하면 좋지만, 바닐라 js이니 그냥 내용을 40개로 끊자
-        const objectId = content.substring(0, 40).padStart(40, '0');
+    // content를 내용으로 가지는 오브젝트 파일을 만듬
+    _makeObject(content){
+        // sha1을 적용하면 좋지만, 바닐라 js만 써야하니 그냥 적당한 hash함수를 만들었다.
+        const objectId = hash(`blob\n${content}`);
         const objectIdDir = objectId.substring(0, 2);
         const objectIdFile = objectId.substring(2);
         const objectPath = path.join(this._objectsDir, objectIdDir, objectIdFile);
@@ -117,6 +117,17 @@ class Local{
         return objectId;
     }
     
+    // Blob 파일을 만들고, object Id를 반환.
+    _makeBlob(content){
+        return this._makeObject(`blob\n${content}`);
+    }
+    
+    // Index를 바탕으로 Tree를 만들어냄.
+    _makeTree(){
+        const indexString = this._getStringFromIndex();
+        
+        return this._makeObject(`tree\n${indexString}`);
+    }
     
     _addIndex(filepath, content){
         const blobIdFromContent = this._makeBlob(content);
