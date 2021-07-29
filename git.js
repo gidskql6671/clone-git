@@ -41,6 +41,7 @@ class Git{
         fs.mkdirSync(path.join(fileName, ".git"));
         fs.mkdirSync(path.join(fileName, ".git", "objects")); 
         fs.mkdirSync(path.join(fileName, ".git", "logs")); 
+        fs.writeFileSync(path.join(fileName, ".git", "index"), ""); 
         
         console.log(`created ${repoName} repository`);
         this._local.push(new Local(this._localPath, repoName));

@@ -12,9 +12,10 @@ class Local{
         this._repoPath = path.join(this._dir, ".git", "objects");
         this._logPath = path.join(this._dir, ".git", "logs");
         this._remoteDir = path.join(this._dir, ".remote");
+        this._indexFile = path.join(this._dir, ".git", "index");
         
         this._files = this._getWorkingDirFiles();
-        this._index = [];
+        this._index = this._getIndexFiles();
         this._repo = this._getRepositoryFiles();
         
         this._remote = null;
@@ -36,6 +37,15 @@ class Local{
                     return new File({name: filename, content: content, time: stat.mtime, size: stat.size});
                 })
         
+    }
+    _getIndexFiles(){
+        const indexFileData = fs.readFileSync(this._indexFile);
+        
+        if (indexFileData.length === 0){
+            return [];
+        }
+        
+        return JSON.parse(indexFileData).map(file => new File(file));    
     }
     _getRepositoryFiles(){
         const files = fs.readdirSync(this._repoPath);
@@ -101,6 +111,7 @@ class Local{
         // 같은 객체를 넣으면, add 이후 update하면 working space와 index가 같이 바뀜
         this._index.push(new File({name: file.getName(), content: file.getContent(),
                                    time: file.getTime(), size: file.getSize(), status: "Staged"}));
+        fs.writeFileSync(this._indexFile, JSON.stringify(this._index));
         this.printStagingArea();
     }
     commit(message){
