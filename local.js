@@ -14,6 +14,8 @@ class Local{
         this._remoteDir = path.join(this._dir, ".remote");
         this._indexFile = path.join(this._dir, ".git", "index");
         
+        this._objectsDir = path.join(this._dir, ".git", "objects");
+        
         this._files = this._getWorkingDirFiles();
         this._index = this._getIndexFiles();
         this._repo = this._getRepositoryFiles();
@@ -98,6 +100,93 @@ class Local{
         file.print();
         
         return true;
+    }
+    
+    // Blob 파일을 만들고, object Id를 반환.
+    _makeBlob(content){
+        // sha1을 적용하면 좋지만, 바닐라 js이니 그냥 내용을 40개로 끊자
+        const objectId = content.substring(0, 40).padStart(40, '0');
+        const objectIdDir = objectId.substring(0, 2);
+        const objectIdFile = objectId.substring(2);
+        const objectPath = path.join(this._objectsDir, objectIdDir, objectIdFile);
+        
+        if (!fs.existsSync(objectPath)){
+            fs.writeFileSync(objectPath, content);
+        }
+        
+        return objectId;
+    }
+    
+    
+    _addIndex(filepath, content){
+        const blobIdFromContent = this._makeBlob(content);
+        const blobIdFromIndex = this._getObjectIdFromIndexByFilepath(filepath);
+        
+        // 새로 만든 파일이다.
+        if (blobIdFromIndex === null){
+            fs.appendFileSync(this._indexFile, `\n${filepath} ${blobIdFromContent}`);
+        }
+        // 변한게 없다.
+        else if (blobIdFromIndex === blobIdFromContent){
+            console.log(`${filepath}는 변경된 점이 없습니다.`);
+        }
+        // 변했다.
+        else{
+            this._modifyIndex(filepath, content);
+        }
+    }
+    // index의 filepath 파일의 objectId를 변경한다.
+    // 딱 그 위치만 덮어쓰기하면 될 것같은데, 아직 js로는 파일 스트림을 잘 못다루겠다...
+    _modifyIndex(filepath, newContent){
+        const data = this._getStringFromIndex();
+        
+        const newData = data.split("\n").map(line => {
+            const array = line.split(" ");
+            const indexFilepath = array.slice(0, -1).join(" ");
+            
+            if (indexFilepath !== filepath)
+                return line;
+            
+            const blob = this._makeBlob(newContent);
+            
+            return `${indexFilepath} ${blob}`;
+        })
+        .join("\n");
+    
+        fs.writeFileSync(this._indexFile, newData);
+        
+        return true;
+    }
+    
+    // Index 파일로부터 문자열을 가져온다.
+    _getStringFromIndex(){
+        if (!fs.existsSync(this._indexFile)){
+            console.log("index 파일이 없습니다.");
+            return "";
+        }
+        
+        return fs.readFileSync(this._indexFile);
+    }
+    // Index 파일로부터 Filepath에 해당하는 objectId를 가져온다.
+    // 없다면 null 반환.
+    _getObjectIdFromIndexByFilepath(filepath){
+        const data = this._getStringFromIndex();
+        
+        
+        const lineArray = data.split("\n").find(line => {
+            const array = line.split(" ");
+            const indexFilepath = array.slice(0, -1).join(" ");
+            
+            if (indexFilepath === filepath)
+                return true;
+            return false;
+        }).split(" ");
+        
+        if (typeof lineArray === "undefined")
+            return null;
+            
+        // 가장 마지막 값이 blob의 obj id이다.
+        return lineArray[lineArray.length - 1];
     }
     
     add(name){
