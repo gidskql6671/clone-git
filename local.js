@@ -155,6 +155,8 @@ class Local{
         const log = this._repo.reduce((prev, commit) => prev + JSON.stringify(commit), "")
         
         fs.writeFileSync(path.join(this._logPath, filename), log);
+        
+        console.log(`export ${filename}`);
     }
     
     printAll(){
