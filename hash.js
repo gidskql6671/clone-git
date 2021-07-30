@@ -1,10 +1,12 @@
 
 exports.hash = (str) => {
-    if (str.length <= 40)
-        return str.padStart(40, '0');
+    const lineStr = str.split(/\s/).join("");
     
-    return Array.from(str).reduce((prev, cur, index) => {
-        if (index % 2 == 0)
+    if (lineStr.length <= 40)
+        return lineStr.padStart(40, '0');
+    
+    return Array.from(lineStr).reduce((prev, cur, index) => {
+        if (index % 2 === 0)
             return prev + cur;
         return prev;
     }, "")
