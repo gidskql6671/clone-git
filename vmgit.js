@@ -5,7 +5,7 @@ const Git = require("./git.js");
 vmgit();
 
 async function vmgit(){
-    const git = new Git("local");
+    const git = new Git("local", 1);
     
     while(true){
         const input = await io.getLine(git.getCurLocalRepoName());

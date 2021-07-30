@@ -1,25 +1,32 @@
 const path = require('path')
 const fs = require('fs');
 const Local = require('./local.js');
+const LocalV2 = require('./localVer2.js');
 
 
 class Git{
-    constructor(localPath = "."){
+    constructor(localPath = ".", localVer = 1){
         this._localPath = localPath;
         if (!fs.existsSync(localPath))
             fs.mkdirSync(localPath);
             
         this._curLocalRepo = null;
+        this.localVer = localVer;
         
-        this._local = this._getRepoNameList().map(name => new Local(localPath, name));
+        if (localVer == 1){
+            this._local = this._getRepoNameList().map(name => new Local(localPath, name));
+        }
+        else if (localVer == 2){
+            this._local = this._getRepoNameList().map(name => new LocalV2(localPath, name));
+        }
     }
     
     _getRepoNameList(){
-        const files = fs.readdirSync(this._localPath, {withFileTypes: true});
+        const files = fs.readdirSync(this._localPath, {withFileTypes: true, encoding: 'utf-8'});
         
         return files.filter(file => file.isDirectory())
                     .filter(({name}) => {
-                        const innerFiles = fs.readdirSync(path.join(this._localPath, name));
+                        const innerFiles = fs.readdirSync(path.join(this._localPath, name), 'utf-8');
                         
                         if (innerFiles.includes(".git")){
                             return true;
@@ -41,10 +48,18 @@ class Git{
         fs.mkdirSync(path.join(fileName, ".git"));
         fs.mkdirSync(path.join(fileName, ".git", "objects")); 
         fs.mkdirSync(path.join(fileName, ".git", "logs")); 
-        fs.writeFileSync(path.join(fileName, ".git", "index"), ""); 
+        fs.writeFileSync(path.join(fileName, ".git", "index"), "", 'utf-8'); 
+        fs.mkdirSync(path.join(fileName, ".git", "refs", "heads"),{ recursive: true });
+        fs.writeFileSync(path.join(fileName, ".git", "refs", "heads", "main"), ""); 
         
         console.log(`created ${repoName} repository`);
-        this._local.push(new Local(this._localPath, repoName));
+        
+        if (this.localVer == 1){
+            this._local.push(new Local(this._localPath, repoName));
+        }
+        else if (this.localVer == 2){
+            this._local.push(new LocalV2(this._localPath, repoName));
+        }
         
         return true;
     };

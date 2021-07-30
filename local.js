@@ -2,7 +2,6 @@ const path = require('path')
 const fs = require('fs');
 const File = require('./file.js');
 const Remote = require('./remote.js');
-const { hash } = require('./hash.js');
 
 
 class Local{
@@ -13,8 +12,6 @@ class Local{
         this._logPath = path.join(this._dir, ".git", "logs");
         this._remoteDir = path.join(this._dir, ".remote");
         this._indexFile = path.join(this._dir, ".git", "index");
-        
-        this._objectsDir = path.join(this._dir, ".git", "objects");
         
         this._files = this._getWorkingDirFiles();
         this._index = this._getIndexFiles();
@@ -100,123 +97,6 @@ class Local{
         file.print();
         
         return true;
-    }
-    
-    // content를 내용으로 가지는 오브젝트 파일을 만듬
-    _makeObject(content){
-        // sha1을 적용하면 좋지만, 바닐라 js만 써야하니 그냥 적당한 hash함수를 만들었다.
-        const objectId = hash(`blob\n${content}`);
-        const objectIdDir = objectId.substring(0, 2);
-        const objectIdFile = objectId.substring(2);
-        const objectPath = path.join(this._objectsDir, objectIdDir, objectIdFile);
-        
-        if (!fs.existsSync(objectPath)){
-            fs.writeFileSync(objectPath, content);
-        }
-        
-        return objectId;
-    }
-    
-    // Blob 파일을 만들고, object Id를 반환.
-    _makeBlob(content){
-        return this._makeObject(`blob\n${content}`);
-    }
-    
-    // Index를 바탕으로 Tree를 만들고, object Id를 반환
-    _makeTree(){
-        const indexString = this._getStringFromIndex();
-        
-        return this._makeObject(`tree\n${indexString}`);
-    }
-    
-    // commit 파일을 만들고, object Id를 반환.
-    _makeCommit(treeObjId, log, parent = ""){
-        let content = `commit\ntree ${treeObjId}\n`;
-        if (parent.length > 0){
-            content += `parent ${parent}\n`;
-        }
-        content += `\n${log}`;
-        
-        return this._makeObject(content);
-    }
-    
-    _addIndex(filename, blobId){
-        fs.appendFileSync(this._indexFile, `\n${filename} ${blobId}`);
-        
-        return true;
-    }
-    // index의 filepath 파일의 objectId를 변경한다.
-    // 딱 그 위치만 덮어쓰기하면 될 것같은데, 아직 js로는 파일 스트림을 잘 못다루겠다...
-    _modifyIndex(filename, newBlobId){
-        const data = this._getStringFromIndex();
-        
-        const newData = data.split("\n").map(line => {
-            const array = line.split(" ");
-            const indexFilename = array.slice(0, -1).join(" ");
-            
-            if (indexFilename !== filename)
-                return line;
-            
-            const blob = this._makeBlob(newBlobId);
-            
-            return `${indexFilename} ${blob}`;
-        })
-        .join("\n");
-    
-        fs.writeFileSync(this._indexFile, newData);
-        
-        return true;
-    }
-    
-    // Index 파일로부터 문자열을 가져온다.
-    _getStringFromIndex(){
-        if (!fs.existsSync(this._indexFile)){
-            console.log("index 파일이 없습니다.");
-            return "";
-        }
-        
-        return fs.readFileSync(this._indexFile);
-    }
-    // Index 파일로부터 Filepath에 해당하는 objectId를 가져온다.
-    // 없다면 null 반환.
-    _getObjectIdFromIndexByFilename(filename){
-        const data = this._getStringFromIndex();
-        
-        
-        const lineArray = data.split("\n").find(line => {
-            const array = line.split(" ");
-            const indexFilepath = array.slice(0, -1).join(" ");
-            
-            if (indexFilepath === filename)
-                return true;
-            return false;
-        }).split(" ");
-        
-        if (typeof lineArray === "undefined")
-            return null;
-            
-        // 가장 마지막 값이 blob의 obj id이다.
-        return lineArray[lineArray.length - 1];
-    }
-    add2(filename){
-        const filepath = path.join(this._dir, filename);
-        const content = fs.readFileSync(filepath);
-        
-        const blobIdFromContent = this._makeBlob(content);
-        const blobIdFromIndex = this._getObjectIdFromIndexByFilepath(filename);
-        
-        // 새로 만든 파일이다.
-        if (blobIdFromIndex === null){
-            this._addIndex(filename, blobIdFromContent);
-        }
-        // 변한게 없다.
-        else if (blobIdFromIndex === blobIdFromContent){
-            console.log(`${filename} 파일은 변경된 점이 없습니다.`);
-        }
-        // 변했다.
-        else{
-            this._modifyIndex(filename, blobIdFromContent);
-        }
     }
     
     add(name){
