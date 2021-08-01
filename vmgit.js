@@ -5,7 +5,9 @@ const Git = require("./git.js");
 vmgit();
 
 async function vmgit(){
-    const git = new Git("local", 1);
+    // localVer = 1 : 문제 구현대로 구현한 것.
+    // localVer = 2 : 실제 git의 구현대로 구현하는 중. 아직 미완...
+    const git = new Git({localPath: "local", localVer: 1});
     
     while(true){
         const input = await io.getLine(git.getCurLocalRepoName());

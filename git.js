@@ -5,7 +5,7 @@ const LocalV2 = require('./localVer2.js');
 
 
 class Git{
-    constructor(localPath = ".", localVer = 1){
+    constructor({localPath = ".", localVer = 1}){
         this._localPath = localPath;
         if (!fs.existsSync(localPath))
             fs.mkdirSync(localPath);
