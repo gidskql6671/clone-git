@@ -2,8 +2,6 @@ const io = require("./console_io.js");
 const Git = require("./git.js");
 
 
-vmgit();
-
 async function vmgit(){
     // localVer = 1 : 문제 구현대로 구현한 것.
     // localVer = 2 : 실제 git의 구현대로 구현하는 중. 아직 미완...
@@ -81,3 +79,5 @@ async function vmgit(){
         console.log();
     }
 };
+
+module.exports = vmgit;
