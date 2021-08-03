@@ -1,63 +1,19 @@
 const path = require('path')
 const fs = require('fs');
-const File = require('./file.js');
 const Remote = require('./remote.js');
+const { hash } = require('./hash.js');
 
 
 class Local{
     constructor(dir, name){
         this._name = name;
         this._dir = path.join(dir, name);
-        this._repoPath = path.join(this._dir, ".git", "objects");
+        
         this._logPath = path.join(this._dir, ".git", "logs");
         this._remoteDir = path.join(this._dir, ".remote");
         this._indexFile = path.join(this._dir, ".git", "index");
-        
-        this._files = this._getWorkingDirFiles();
-        this._index = this._getIndexFiles();
-        this._repo = this._getRepositoryFiles();
-        
-        this._remote = null;
-        if (fs.existsSync(this._remoteDir)){
-            this._remote = new Remote(this._remoteDir);
-        }
-    }
-    
-    _getWorkingDirFiles(){
-        const files = fs.readdirSync(this._dir);
-        
-        return files.filter(file => !file.startsWith("."))
-                .map(filename => {
-                    const filePath = path.join(this._dir, filename);
-                    const stat = fs.statSync(filePath);
-                    const content = fs.readFileSync(filePath);
-                
-                    
-                    return new File({name: filename, content: content, time: stat.mtime, size: stat.size});
-                })
-        
-    }
-    _getIndexFiles(){
-        const indexFileData = fs.readFileSync(this._indexFile);
-        
-        if (indexFileData.length === 0){
-            return [];
-        }
-        
-        return JSON.parse(indexFileData).map(file => new File(file));    
-    }
-    _getRepositoryFiles(){
-        const files = fs.readdirSync(this._repoPath);
-        
-        return files.sort((a, b) => a - b)
-                    .map(filename => {
-                        const filePath = path.join(this._repoPath, filename);
-                        return JSON.parse(fs.readFileSync(filePath));
-                    })
-                    .map(commit => {
-                        commit.files = commit.files.map(file => new File(file));
-                        return commit;
-                    })
+        this._objectsDir = path.join(this._dir, ".git", "objects");
+        this._headFile = path.join(this._dir, ".git", "refs", "heads", "main");
     }
     
     getName(){
@@ -66,13 +22,12 @@ class Local{
     
     makeFile(name, content){
         const filename = path.join(this._dir, name);
+        const dirname = path.join(...filename.split(path.sep).slice(0, -1));
+        
+        if (!fs.existsSync(dirname))
+            fs.mkdirSync(dirname, {recursive: true});
         
         fs.writeFileSync(filename, content);
-        const stat = fs.statSync(filename);
-        
-        const file = new File({name: name, content: content, time: stat.birthtime, size: stat.size});
-        this._files.push(file);
-        file.print();
         
         return true;
     }
@@ -86,91 +41,386 @@ class Local{
         
         fs.writeFileSync(filename, content);
         
-        const stat = fs.statSync(filename);
-        const file = this._files.find(ele => ele.getName() === name);
-        file.setContent(content);
-        file.setSize(stat.size);
-        file.setTime(stat.mtime);
-        if (file.getStatus() !== "Untracked"){
-            file.setStatus("Modified");
+        return true;
+    }
+    
+    // content를 내용으로 가지는 오브젝트 파일을 만듬
+    _makeObject(content){
+        // sha1을 이용한 hash함수를 만들었다.
+        const objectId = hash(content); 
+        const objectIdDir = objectId.substring(0, 2);
+        const objectIdFile = objectId.substring(2);
+        const objectDirPath = path.join(this._objectsDir, objectIdDir);
+        const objectPath = path.join(objectDirPath, objectIdFile);
+        
+        if (!fs.existsSync(objectDirPath)){
+            fs.mkdirSync(objectDirPath, {recursive: true});
         }
-        file.print();
+        if (!fs.existsSync(objectPath)){
+            fs.writeFileSync(objectPath, content, 'utf-8');
+        }
+        
+        return objectId;
+    }
+    
+    // Blob 파일을 만들고, object Id를 반환.
+    _makeBlob(content){
+        return this._makeObject(`${content}`);
+    }
+    
+    // Index를 바탕으로 Tree를 만들고, object Id를 반환
+    _makeTree(){
+        const indexString = this._getStringFromIndex();
+        const indexArray = indexString.split("\n")
+        .map(line => {
+            const array = line.split(" ");
+            const filename = array.slice(0, -1).join(" ");
+            const blobId = array[array.length - 1];
+            
+            
+            return {filename: filename, blobId: blobId};
+        })
+        
+        return this._makeTreeRecurs(indexArray);
+    }
+    _makeTreeRecurs(indexArray, dirname = "", pos = 0){
+        const blobList = indexArray.filter(({filename}) => filename.split(path.sep).length === pos + 1)
+                            .filter(({filename}) => filename.startsWith(dirname));
+        const treeList = indexArray.filter(({filename}) => filename.split(path.sep).length > pos + 1);
+        let content = ``;
+        
+        const blobContent = blobList.map(({filename, blobId}) => {
+            const file = filename.split(path.sep).slice(-1)[0];
+            
+            return `blob ${blobId} ${file}`;
+        });
+        
+        
+        const treeObjectArray = treeList.map(({filename, blobId}) => {
+            const firstDir = filename.split(path.sep).slice(0, pos + 1).join(path.sep);
+            
+            const treeId = this._makeTreeRecurs(indexArray, `${dirname}${firstDir}/`, pos + 1);
+            
+            const curDir = firstDir.slice(-1)[0];
+            
+            return {filename: curDir, treeId: treeId};
+        })
+        
+        // 중복 값을 제거
+        const treeContent = treeObjectArray.filter((ele, index) => {
+            return index === treeObjectArray.findIndex((ele2) => {
+                return ele.filename === ele2.filename && ele.treeId === ele2.treeId
+            })
+        }).map(ele => `tree ${ele.treeId} ${ele.filename}`);
+        
+        const totalContent = treeContent.concat(blobContent).join("\n");
+        content += totalContent;
+        
+        return this._makeObject(`${content}`);
+    }
+    
+    // commit 파일을 만들고, object Id를 반환.
+    _makeCommit(treeObjId, log, parent = ""){
+        const content = `${treeObjId}\n${parent}\n${log}`;
+        
+        return this._makeObject(content);
+    }
+    
+    // objectId에 해당하는 CommitObj를 가져옴
+    _getCommitObj(objectId){
+        if (objectId === ""){
+            throw new Error(`objectId가 비어있습니다.`);
+        }
+        
+        const objectIdDir = objectId.substring(0, 2);
+        const objectIdFile = objectId.substring(2);
+        const objectPath = path.join(this._objectsDir, objectIdDir, objectIdFile);
+        
+        if (!fs.existsSync(objectPath)){
+            throw new Error("해당 Commit 오브젝트가 없습니다.");
+        }
+        /*
+        treeObjId
+        [parentObjId | ""] 
+        logmessage
+        */
+       
+        const data = fs.readFileSync(objectPath, 'utf-8');
+        const [tree, parent, ...log] = data.split("\n");
+        
+        const obj = {
+            tree: tree,
+            parent: parent === "" ? null : parent,
+            log: log.join('\n')
+        };
+        
+        return obj;
+    }
+    // tree로부터 filename에 해당하는 blobId를 가져옴
+    _getBlobIdFromTreeByFilename(tree, filename){
+        const objectIdDir = tree.substring(0, 2);
+        const objectIdFile = tree.substring(2);
+        const objectPath = path.join(this._objectsDir, objectIdDir, objectIdFile);
+        
+        if (!fs.existsSync(objectPath)){
+            throw new Error("해당 Tree 오브젝트가 없습니다.");
+        }
+        /*
+        blob blobId
+        blob blodId
+        ...
+        tree treeId
+        */
+       
+        const data = fs.readFileSync(objectPath, 'utf-8');
+        let dirname = "";
+        if (filename.split(path.sep).length > 1){
+            dirname = filename.split(path.sep)[0];
+        }
+        let blobId = null;
+        
+        data.split("\n")
+        .filter(line => {
+            const [type, objectId, filename] = line.split(" ");
+            
+            if (dirname === "")
+                return type === "blob";
+            else
+                return type === "tree";
+        })
+        .forEach(line => {
+            const [type, objectId, filename] = line.split(" ");
+            
+            if (dirname === ""){
+                blobId = objectId;
+            }
+            else{
+                if (dirname === filename){
+                    this._getBlobIdFromTreeByFilename(objectId, filename.split(path.sep).slice(1).join(path.sep));
+                }
+            }
+        })
+        
+        return blobId;
+    }
+    // tree로부터 모든 blob 객체 Index형태로 가져옴.
+    _getBlobObjFromTreeFormatIndex(tree, dir = ""){
+        const objectIdDir = tree.substring(0, 2);
+        const objectIdFile = tree.substring(2);
+        const objectPath = path.join(this._objectsDir, objectIdDir, objectIdFile);
+        
+        if (!fs.existsSync(objectPath)){
+            throw new Error("해당 Tree 오브젝트가 없습니다.");
+        }
+        
+        const data = fs.readFileSync(objectPath, 'utf-8');
+        
+        return data.split("\n")
+        .map(line => {
+            const [type, objectId, filename] = line.split(" ");
+            
+            if (type === "blob")
+                return `${path.join(dir, filename)} ${objectId}`;
+            else
+                return this._getBlobObjFromTree(objectId, path.join(dir, filename));
+        }).join("\n");
+    }
+    // 인덱스에 filename과 blobId를 추가한다
+    _addIndex(filename, blobId){
+        const str = fs.readFileSync(this._indexFile, {encoding: 'utf-8'});
+        if (str.length === 0){
+            fs.appendFileSync(this._indexFile, `${filename} ${blobId}`);
+        }
+        else{
+            fs.appendFileSync(this._indexFile, `\n${filename} ${blobId}`);
+        }
+        
+        return true;
+    }
+    // index의 filepath 파일의 objectId를 변경한다.
+    // 딱 그 위치만 덮어쓰기하면 될 것같은데, 아직 js로는 파일 스트림을 잘 못다루겠다...
+    _modifyIndex(filename, newBlobId){
+        const data = this._getStringFromIndex();
+        
+        const newData = data.split("\n").map(line => {
+            const array = line.split(" ");
+            const indexFilename = array.slice(0, -1).join(" ");
+            
+            if (indexFilename !== filename)
+                return line;
+            
+            const blob = this._makeBlob(newBlobId);
+            
+            return `${indexFilename} ${blob}`;
+        })
+        .join("\n");
+    
+        fs.writeFileSync(this._indexFile, newData, 'utf-8');
         
         return true;
     }
     
-    add(name){
-        const file = this._files.find(ele => ele.getName() === name);
-        if (typeof file === "undefined"){
-            console.log(`${name} 파일은 존재하지 않습니다.`);
-            return;
+    // Index 파일로부터 문자열을 가져온다.
+    _getStringFromIndex(){
+        if (!fs.existsSync(this._indexFile)){
+            console.log("index 파일이 없습니다.");
+            return "";
         }
         
-        file.setStatus("Staged");
-        // 같은 객체를 넣으면, add 이후 update하면 working space와 index가 같이 바뀜
-        this._index.push(new File({name: file.getName(), content: file.getContent(),
-                                   time: file.getTime(), size: file.getSize(), status: "Staged"}));
-        fs.writeFileSync(this._indexFile, JSON.stringify(this._index));
-        this.printStagingArea();
+        return fs.readFileSync(this._indexFile, 'utf-8');
     }
-    commit(message){
-        if (this._index.length === 0){
-            console.log("스테이지된 파일이 없습니다.");
+    // Index 파일로부터 Filepath에 해당하는 objectId를 가져온다.
+    // 없다면 null 반환.
+    _getObjectIdFromIndexByFilename(filename){
+        const data = this._getStringFromIndex();
+        
+        
+        const line = data.split("\n").find(line => {
+            const array = line.split(" ");
+            const indexFilepath = array.slice(0, -1).join(" ");
+            
+            if (indexFilepath === filename)
+                return true;
             return false;
-        }
+        });
+        if (typeof line === "undefined")
+            return null;
+            
+        return line.split(" ")[1];
+    }
+    // 마지막 커밋의 id를 가져온다.
+    // 없다면 null 반환
+    _getLastCommitId(){
+        const lastCommidId = fs.readFileSync(this._headFile, 'utf-8');
         
-        const current = new Date();
-        const commited = {
-            message: message,
-            time: current,
-            files: this._index.map(ele => {
-                    const workFile = this._files.find(workEle => workEle.getName() === ele.getName());
-                    workFile.setStatus("Unmodified");
-                    
-                    return new File({name: ele.getName(), content: ele.getContent(), 
-                                     time: current, size: ele.getSize(), status: "Unmodified"});
-                })
-            }
-        
-        this._repo.push(commited);
-        
-        const version = fs.readdirSync(this._repoPath).length;
-        const filePath = path.join(this._repoPath, String(version));
-        fs.writeFileSync(filePath, JSON.stringify(commited));
-        
-        
-        console.log("---commit files/");
-        console.log(`commit "${commited.message}"`);
-        commited.files.forEach(file => file.print());
-        
-        this._index = []; // index를 비워줌
+        return lastCommidId;
+    }
+    // Head에 마지막 커밋을 설정한다.
+    _setLastCommitId(commitId){
+        fs.writeFileSync(this._headFile, commitId, 'utf-8');
         
         return true;
     }
-    push(){
-        if (this._remote === null){
-            this._remote = new Remote(this._remoteDir);
+    // 마지막 커밋으로부터 filename에 해당하는 blob Id를 가져온다.
+    _getBlobIdFromLastCommitByFilename(filename){
+        const lastCommitId = this._getLastCommitId();
+        
+        if (lastCommitId === ""){
+            return "";
         }
         
-        this._remote.push(this._getRepositoryFiles());
+        const commitObj = this._getCommitObj(lastCommitId);
+        const lastTreeObjId = commitObj.tree;
+        
+        return this._getBlobIdFromTreeByFilename(lastTreeObjId, filename);
     }
-    export(){
-        const today = new Date();
+    // 마지막 커밋과 인덱스를 같은지 비교함.
+    // 커밋이력이 없으면 항상 false 반환
+    _equalsIndexToLastCommit(){
+        const index = this._getStringFromIndex();
+        const lastCommit = this._getLastCommitId();
+        if (lastCommit === ""){
+            return false;
+        }
+        const {tree} = this._getCommitObj(lastCommit);
         
-        const year = today.getFullYear();
-        const month = today.getMonth() + 1;
-        const date = today.getDate();
+        const blobInLastCommit = this._getBlobObjFromTreeFormatIndex(tree);
         
-        const hours = today.getHours();
-        const minutes = today.getMinutes();
+        console.log(blobInLastCommit);
         
-        const filename = `${this._name}-${year}${month}${date}-${hours}${minutes}.git`;
+    }
+    
+    // add 명령어
+    add(filename){
+        const filepath = path.join(this._dir, filename);
+        if (!fs.existsSync(filepath)){
+            console.log("해당 파일이 없습니다.");
+            return false;
+        }
         
-        const log = this._repo.reduce((prev, commit) => prev + JSON.stringify(commit), "")
+        const content = fs.readFileSync(filepath, 'utf-8');
         
-        fs.writeFileSync(path.join(this._logPath, filename), log);
+        const blobIdFromContent = this._makeBlob(content);
+        const blobIdFromIndex = this._getObjectIdFromIndexByFilename(filename);
         
-        console.log(`export ${filename}`);
+        // 새로 만든 파일이다.
+        if (blobIdFromIndex === null){
+            this._addIndex(filename, blobIdFromContent);
+        }
+        // 변한게 없다.
+        else if (blobIdFromIndex === blobIdFromContent){
+            console.log(`${filename} 파일은 변경된 점이 없습니다.`);
+        }
+        // 변했다.
+        else{
+            this._modifyIndex(filename, blobIdFromContent);
+        }
+    }
+    // commit 명령어
+    commit(message){
+        const parentId = this._getLastCommitId();
+        if (parentId !== "" && this._equalsIndexToLastCommit()){
+            console.log("변경된 점이 없습니다.");
+            return false;
+        }
+        
+        const treeId = this._makeTree();
+        const commitId = this._makeCommit(treeId, message, parentId);
+        
+        this._setLastCommitId(commitId);
+        
+        return true;
+    }
+    status(){
+        const indexString = this._getStringFromIndex();
+        const indexArray = indexString.split("\n")
+        .map(line => {
+            const array = line.split(" ");
+            const filename = array.slice(0, -1).join(" ");
+            const blobId = array[array.length - 1];
+            
+            return {filename: filename, blobId: blobId};
+        })
+        
+        this._status(this._dir, indexArray)
+        .forEach(ele => {
+            console.log(`filename: ${ele.filename}, status: ${ele.status}`);
+        });
+    }
+    _status(dirname, indexArray){
+        const files = fs.readdirSync(dirname, {withFileTypes: true, encoding: 'utf-8'});
+        
+        return files.filter(({name}) => name !== ".git")
+        .flatMap(file => {
+            if (file.isDirectory()){
+                return this._status(path.join(dirname, file.name), indexArray);
+            }
+            
+            const filename = file.name;
+            const content = fs.readFileSync(path.join(dirname, filename), 'utf-8');
+            const indexElement = indexArray.find(ele => ele.filename === filename);
+            // untracked
+            if (typeof indexElement === "undefined"){
+                return {filename: path.join(dirname, filename).substring(this._dir.length + 1), blobId: null, status: "untracked"};
+            }
+            const blobId = this._makeBlob(content);
+            
+            if (indexElement.blobId === blobId){
+                const BlobIdWhenLastCommit = this._getBlobIdFromLastCommitByFilename(filename);
+                // unmodified  마지막 커밋이랑 비교했는데 내용이 그대로면 unmodified
+                if (blobId === BlobIdWhenLastCommit){
+                    return {filename: path.join(dirname, filename).substring(this._dir.length + 1), blobId: blobId, status: "unmodified"};
+                }
+                // staged  커밋이력이 없거나 마지막 커밋이랑 비교했는데 내용이 바뀌면 staged
+                else{
+                    return {filename: path.join(dirname, filename).substring(this._dir.length + 1), blobId: blobId, status: "staged"};
+                }
+            }
+            // modified
+            else{
+                return {filename: path.join(dirname, filename).substring(this._dir.length + 1), blobId: blobId, status: "modified"};
+            }
+        })
     }
     
     printAll(){
@@ -182,29 +432,71 @@ class Local{
     }
     printWorkingDir(){
         console.log("---Working Directory/");
-        this._files.forEach(ele => ele.print());
+        // this._printWorkingDir();
+        this.status();
     }
+    _printWorkingDir(dirname = "./"){
+        const files = fs.readdirSync(path.join(this._dir, dirname), {encoding: 'utf-8', withFileTypes: true});
+        
+        files.filter(({name}) => name !== ".git")
+        .forEach(file => {
+            const filename = file.name;
+            
+            if (!file.isDirectory()){
+                const stat = fs.statSync(path.join(this._dir, dirname, filename));
+                console.log(`${dirname.slice(2)}${filename}(${stat.size}) ${stat.mtime}`);
+            }
+            else{
+                this._printWorkingDir(`${dirname}${filename}/`);
+            }
+        })
+    }
+    
     printStagingArea(){
         console.log("---Staging Area/");
-        this._index.forEach(ele => ele.print());
+        this._getStringFromIndex().split("\n")
+        .forEach(line => {
+            const array = line.split(" ");
+            const filename = array.slice(0, -1).join(" ");
+            const blobId = array[array.length - 1];
+            
+            const stat = fs.statSync(path.join(this._objectsDir, blobId.substring(0,2), blobId.substring(2)));
+            console.log(`${filename}(${stat.size}) ${stat.mtime}`);
+        })
+        
     }
     printRepository(){
         console.log("---Git Repository/");
-        this._repo.forEach(version => {
-            console.log(`commit "${version.message}"`);
-            version.files.forEach(file => {
-                file.print()
-            });
-            console.log("");
-        });
-    }
-    printRemote(){
-        if (this._remote === null){
-            console.log("해당 저장소가 없습니다.");
-            return false;
-        }
+        const lastCommitId = this._getLastCommitId();
         
-        this._remote.print();
+        if (lastCommitId !== ""){
+            this._printCommitLog(lastCommitId);
+        }
+    }
+    _printCommitLog(commitId){
+        const commitPath = path.join(this._objectsDir, commitId.substring(0,2), commitId.substring(2))
+        const stat = fs.statSync(commitPath);
+        const commitFile = fs.readFileSync(commitPath, 'utf-8');
+        
+        const [tree, parent, ...log] = commitFile.split("\n");
+        
+        console.log(commitId, stat.mtime);
+        console.log(log.join("\n"));
+        
+        if (parent !== "")
+            this._printCommitLog(parent);
+    }
+    
+    printRemote(){
+        console.log("미구현");
+        return true;
+    }
+    push(){
+        console.log("미구현");
+        return true;
+    }
+    export(){
+        console.log("미구현");
         return true;
     }
 }

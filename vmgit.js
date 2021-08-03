@@ -3,9 +3,7 @@ const Git = require("./git.js");
 
 
 async function vmgit(){
-    // localVer = 1 : 문제 구현대로 구현한 것.
-    // localVer = 2 : 실제 git의 구현대로 구현하는 중. 아직 미완...
-    const git = new Git({localPath: "local", localVer: 1});
+    const git = new Git({localPath: "local"});
     
     while(true){
         const input = await io.getLine(git.getCurLocalRepoName());
@@ -22,10 +20,10 @@ async function vmgit(){
         else if (input === "status remote"){
             git.statusRemote();
         }
-        else if (input.startsWith("status")){
+        else if (input.startsWith("status ") || input === "status"){
             git.status();
         }
-        else if (input.startsWith("checkout")){
+        else if (input.startsWith("checkout ") || input === "checkout"){
             let repoName = input.split(' ')[1];
             if (typeof repoName === "undefined" || repoName.length === 0){
                 repoName = "";
@@ -33,19 +31,19 @@ async function vmgit(){
             
             git.checkout(repoName);
         }
-        else if (input.startsWith("new")){
+        else if (input.startsWith("new ")){
             const [_, filename, ...contentArray] = input.split(' ');
             const content = contentArray.join(' ');
             
             git.makeFile(filename, content);
         }
-        else if (input.startsWith("update")){
+        else if (input.startsWith("update ")){
             const [_, filename, ...contentArray] = input.split(' ');
             const content = contentArray.join(' ');
             
             git.updateFile(filename, content);
         }
-        else if (input.startsWith("add")){
+        else if (input.startsWith("add ")){
             let filename = input.split(' ')[1];
             if (typeof filename === "undefined" || filename.length === 0){
                 filename = "";
@@ -53,7 +51,7 @@ async function vmgit(){
             
             git.add(filename);
         }
-        else if (input.startsWith("commit")){
+        else if (input.startsWith("commit ")){
             const [_, ...messageArray] = input.split(' ');
             const message = messageArray.join(' ');
             

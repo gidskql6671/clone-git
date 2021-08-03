@@ -1,13 +1,11 @@
+/*
+    문제 풀이용에는 사용 안했습니다.
+    개인적인 공부용으로 사용하였습니다...
+*/
+
+const crypto = require('crypto');
+
 
 exports.hash = (str) => {
-    const lineStr = str.split(/\s/).join("");
-    
-    if (lineStr.length <= 40)
-        return lineStr.padStart(40, '0');
-    
-    return Array.from(lineStr).reduce((prev, cur, index) => {
-        if (index % 2 === 0)
-            return prev + cur;
-        return prev;
-    }, "")
+    return crypto.createHash('sha1').update(str).digest('hex');
 }

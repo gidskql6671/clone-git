@@ -1,11 +1,10 @@
 const path = require('path')
 const fs = require('fs');
 const Local = require('./local.js');
-const LocalV2 = require('./localVer2.js');
 
 
 class Git{
-    constructor({localPath = ".", localVer = 1}){
+    constructor({localPath = "."}){
         this._localPath = localPath;
         if (!fs.existsSync(localPath))
             fs.mkdirSync(localPath);
@@ -13,12 +12,8 @@ class Git{
         this._curLocalRepo = null;
         this.localVer = localVer;
         
-        if (localVer == 1){
-            this._local = this._getRepoNameList().map(name => new Local(localPath, name));
-        }
-        else if (localVer == 2){
-            this._local = this._getRepoNameList().map(name => new LocalV2(localPath, name));
-        }
+        // 레포지토리 목록을 가져옴. 얘도 나중에 리팩토링해서 없애버릴 예정
+        this._local = this._getRepoNameList().map(name => new Local(localPath, name));
     }
     
     _getRepoNameList(){

@@ -1,0 +1,11 @@
+{
+  "name": "challenge-day9",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://gist.github.com/gidskql6671/5dedf1340388a1c3f5925552ad670560",
+  "author": "gidskql6671 <gidskql6671@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "crypto": "^1.0.1" 
+  }
+}
