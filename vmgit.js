@@ -3,45 +3,28 @@ const Git = require("./git.js");
 
 
 async function vmgit(){
-    const git = new Git({localPath: "local"});
+    const git = new Git({gitName: ".mygit"});
     
     while(true){
-        const input = await io.getLine(git.getCurLocalRepoName());
+        const input = await io.getLine();
         
-        if (input.startsWith("init")){
-            const repoName = input.split(' ')[1];
-            if (typeof repoName === "undefined" || repoName.length === 0){
-                console.log("[Usage] init <Repo Name>");
+        if (input.match(/^init\s*$/g)){
+            git.init();
+        }
+        else if (input.match(/^status\s*$/g)){
+            git.status();
+        }
+        else if (input.startsWith("checkout ")){
+            console.log("미구현");
+            continue;
+            
+            let repoName = input.split(' ')[1];
+            if (repoName.length === 0){
+                console.log("[Usage] checkout <commitId|branch>");
                 continue;
             }
             
-            git.init(repoName);
-        }
-        else if (input === "status remote"){
-            git.statusRemote();
-        }
-        else if (input.startsWith("status ") || input === "status"){
-            git.status();
-        }
-        else if (input.startsWith("checkout ") || input === "checkout"){
-            let repoName = input.split(' ')[1];
-            if (typeof repoName === "undefined" || repoName.length === 0){
-                repoName = "";
-            }
-            
             git.checkout(repoName);
-        }
-        else if (input.startsWith("new ")){
-            const [_, filename, ...contentArray] = input.split(' ');
-            const content = contentArray.join(' ');
-            
-            git.makeFile(filename, content);
-        }
-        else if (input.startsWith("update ")){
-            const [_, filename, ...contentArray] = input.split(' ');
-            const content = contentArray.join(' ');
-            
-            git.updateFile(filename, content);
         }
         else if (input.startsWith("add ")){
             let filename = input.split(' ')[1];
@@ -55,17 +38,10 @@ async function vmgit(){
             const [_, ...messageArray] = input.split(' ');
             const message = messageArray.join(' ');
             
-            
             git.commit(message);
         }
         else if (input === "log"){
             git.log();
-        }
-        else if (input === "push"){
-            git.push();
-        }
-        else if (input === "export"){
-            git.export();
         }
         else if (input === "exit"){
             return;

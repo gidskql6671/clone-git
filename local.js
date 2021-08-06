@@ -1,47 +1,24 @@
 const path = require('path')
 const fs = require('fs');
-const Remote = require('./remote.js');
 const { hash } = require('./hash.js');
 
 
 class Local{
-    constructor(dir, name){
-        this._name = name;
-        this._dir = path.join(dir, name);
+    constructor({curDir = ".", gitName = ".mygit"}){
+        this._curDir = curDir;
+        this._gitName = gitName;
         
-        this._logPath = path.join(this._dir, ".git", "logs");
-        this._remoteDir = path.join(this._dir, ".remote");
-        this._indexFile = path.join(this._dir, ".git", "index");
-        this._objectsDir = path.join(this._dir, ".git", "objects");
-        this._headFile = path.join(this._dir, ".git", "refs", "heads", "main");
-    }
-    
-    getName(){
-        return this._name;
-    }
-    
-    makeFile(name, content){
-        const filename = path.join(this._dir, name);
-        const dirname = path.join(...filename.split(path.sep).slice(0, -1));
+        this._gitPath = path.join(this._curDir, this._gitName);
+        this._logPath = path.join(this._gitPath, "logs");
+        this._indexFile = path.join(this._gitPath, "index");
+        this._objectsDir = path.join(this._gitPath, "objects");
+        this._headFile = path.join(this._gitPath, "refs", "heads", "main");
         
-        if (!fs.existsSync(dirname))
-            fs.mkdirSync(dirname, {recursive: true});
-        
-        fs.writeFileSync(filename, content);
-        
-        return true;
-    }
-    
-    updateFile(name, content){
-        const filename = path.join(this._dir, name);
-        if (!fs.existsSync(filename)){
-            console.log("해당 파일이 없습니다.");
-            return false;
-        }
-        
-        fs.writeFileSync(filename, content);
-        
-        return true;
+        this._ignores = [
+            ".git",
+            gitName,
+            "node_modules"
+        ];
     }
     
     // content를 내용으로 가지는 오브젝트 파일을 만듬
@@ -332,7 +309,7 @@ class Local{
     
     // add 명령어
     add(filename){
-        const filepath = path.join(this._dir, filename);
+        const filepath = path.join(this._curDir, filename);
         if (!fs.existsSync(filepath)){
             console.log("해당 파일이 없습니다.");
             return false;
@@ -382,7 +359,7 @@ class Local{
             return {filename: filename, blobId: blobId};
         })
         
-        this._status(this._dir, indexArray)
+        this._status(this._curDir, indexArray)
         .forEach(ele => {
             console.log(`filename: ${ele.filename}, status: ${ele.status}`);
         });
@@ -390,7 +367,7 @@ class Local{
     _status(dirname, indexArray){
         const files = fs.readdirSync(dirname, {withFileTypes: true, encoding: 'utf-8'});
         
-        return files.filter(({name}) => name !== ".git")
+        return files.filter(({name}) => !this._ignores.includes(name))
         .flatMap(file => {
             if (file.isDirectory()){
                 return this._status(path.join(dirname, file.name), indexArray);
@@ -401,7 +378,7 @@ class Local{
             const indexElement = indexArray.find(ele => ele.filename === filename);
             // untracked
             if (typeof indexElement === "undefined"){
-                return {filename: path.join(dirname, filename).substring(this._dir.length + 1), blobId: null, status: "untracked"};
+                return {filename: path.join(dirname, filename), blobId: null, status: "untracked"};
             }
             const blobId = this._makeBlob(content);
             
@@ -409,16 +386,16 @@ class Local{
                 const BlobIdWhenLastCommit = this._getBlobIdFromLastCommitByFilename(filename);
                 // unmodified  마지막 커밋이랑 비교했는데 내용이 그대로면 unmodified
                 if (blobId === BlobIdWhenLastCommit){
-                    return {filename: path.join(dirname, filename).substring(this._dir.length + 1), blobId: blobId, status: "unmodified"};
+                    return {filename: path.join(dirname, filename), blobId: blobId, status: "unmodified"};
                 }
                 // staged  커밋이력이 없거나 마지막 커밋이랑 비교했는데 내용이 바뀌면 staged
                 else{
-                    return {filename: path.join(dirname, filename).substring(this._dir.length + 1), blobId: blobId, status: "staged"};
+                    return {filename: path.join(dirname, filename), blobId: blobId, status: "staged"};
                 }
             }
             // modified
             else{
-                return {filename: path.join(dirname, filename).substring(this._dir.length + 1), blobId: blobId, status: "modified"};
+                return {filename: path.join(dirname, filename), blobId: blobId, status: "modified"};
             }
         })
     }
@@ -436,14 +413,14 @@ class Local{
         this.status();
     }
     _printWorkingDir(dirname = "./"){
-        const files = fs.readdirSync(path.join(this._dir, dirname), {encoding: 'utf-8', withFileTypes: true});
+        const files = fs.readdirSync(path.join(this._curDir, dirname), {encoding: 'utf-8', withFileTypes: true});
         
         files.filter(({name}) => name !== ".git")
         .forEach(file => {
             const filename = file.name;
             
             if (!file.isDirectory()){
-                const stat = fs.statSync(path.join(this._dir, dirname, filename));
+                const stat = fs.statSync(path.join(this._curDir, dirname, filename));
                 console.log(`${dirname.slice(2)}${filename}(${stat.size}) ${stat.mtime}`);
             }
             else{

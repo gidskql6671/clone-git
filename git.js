@@ -4,169 +4,67 @@ const Local = require('./local.js');
 
 
 class Git{
-    constructor({localPath = "."}){
-        this._localPath = localPath;
-        if (!fs.existsSync(localPath))
-            fs.mkdirSync(localPath);
-            
-        this._curLocalRepo = null;
-        this.localVer = localVer;
+    constructor({gitName = ".mygit"}){
+        this._gitName = gitName;
+        this._curPath = ".";
         
-        // 레포지토리 목록을 가져옴. 얘도 나중에 리팩토링해서 없애버릴 예정
-        this._local = this._getRepoNameList().map(name => new Local(localPath, name));
+        this._localRepo = this._getRepo(".");
     }
     
-    _getRepoNameList(){
-        const files = fs.readdirSync(this._localPath, {withFileTypes: true, encoding: 'utf-8'});
-        
-        return files.filter(file => file.isDirectory())
-                    .filter(({name}) => {
-                        const innerFiles = fs.readdirSync(path.join(this._localPath, name), 'utf-8');
-                        
-                        if (innerFiles.includes(".git")){
-                            return true;
-                        }
-                        return false;
-                    })
-                    .map(({name}) => name);
+    _getRepo(){
+        if (fs.existsSync(path.join(this._curPath, this._gitName))){
+            return new Local({curDir: this._curPath, gitName: this._gitName});
+        }
+        else{
+            return null;
+        }
     }
     
-    init(repoName) { 
-        const fileName = path.join(this._localPath, repoName);
-        
-        if (fs.existsSync(fileName)){
-            console.log(`${repoName} 저장소가 이미 있습니다.`);
+    init() {
+        const curGitPath = path.join(this._curPath, this._gitName);
+        if (fs.existsSync(curGitPath)){
+            console.log(`이미 초기화 했습니다.`);
             return false;
         }
         
-        fs.mkdirSync(fileName);
-        fs.mkdirSync(path.join(fileName, ".git"));
-        fs.mkdirSync(path.join(fileName, ".git", "objects")); 
-        fs.mkdirSync(path.join(fileName, ".git", "logs")); 
-        fs.writeFileSync(path.join(fileName, ".git", "index"), "", 'utf-8'); 
-        fs.mkdirSync(path.join(fileName, ".git", "refs", "heads"),{ recursive: true });
-        fs.writeFileSync(path.join(fileName, ".git", "refs", "heads", "main"), ""); 
+        fs.mkdirSync(curGitPath);
+        fs.mkdirSync(path.join(curGitPath, "objects")); 
+        fs.mkdirSync(path.join(curGitPath, "logs")); // 헤드나 메인 점이 어떤 명령어에 의해 바꼈는데, 어디서 어디로 바꼈는지의 로그
+        fs.writeFileSync(path.join(curGitPath, "index"), "", 'utf-8'); 
+        fs.mkdirSync(path.join(curGitPath, "refs", "heads"),{ recursive: true });
+        fs.writeFileSync(path.join(curGitPath, "refs", "heads", "main"), "", "utf-8"); 
         
-        console.log(`created ${repoName} repository`);
+        console.log(`Init Repository`);
         
-        if (this.localVer == 1){
-            this._local.push(new Local(this._localPath, repoName));
-        }
-        else if (this.localVer == 2){
-            this._local.push(new LocalV2(this._localPath, repoName));
-        }
+        this._localRepo = new Local({curDir: this._curPath, gitName: this._gitName});
         
         return true;
     };
     
     status() {
-        if (this._curLocalRepo === null){
-            const repoList = this._local.map(ele => ele.getName());
-            
-            repoList.forEach(ele => console.log(`${ele}/`))
+        if (this._localRepo){
+            this._localRepo.printAll();
         }
         else{
-            this._curLocalRepo.printAll();
-        }
-    }
-    statusRemote(){
-        if (!this.isCheckouted()){
-            console.log("체크아웃을 먼저 해주세요.");
-            return false;
-        }
-        else{
-            this._curLocalRepo.printRemote();
+            console.log("git 저장소가 없습니다.");
         }
     }
     
-    checkout(repoName){
-        if (repoName === ""){
-            this._curLocalRepo = null;
-            return true;
-        }
+    // 브렌치 혹은 커밋id를 인자로 받아, 해당 위치로 checkout
+    checkout(objId){
+        // this._localRepo.checkout(objId); 추후 구현
         
-        const local = this._local.find(ele => ele.getName() === repoName);
-        if (typeof local === "undefined"){
-            console.log(`${repoName} 저장소는 없습니다.`);
-            return false;
-        }
-        
-        this._curLocalRepo = local;
         return true;
     }
     
-    makeFile(filename, content){
-        if (!this.isCheckouted()){
-            console.log("체크아웃을 먼저 해주세요.");
-            return false;
-        }
-        
-        this._curLocalRepo.makeFile(filename, content);
-        return true;
-    }
-    updateFile(filename, content){
-        if (!this.isCheckouted()){
-            console.log("체크아웃을 먼저 해주세요.");
-            return false;
-        }
-        
-        this._curLocalRepo.updateFile(filename, content);
-    }
     add(name){
-        if (!this.isCheckouted()){
-            console.log("체크아웃을 먼저 해주세요.");
-            return false;
-        }
-        
-        this._curLocalRepo.add(name);
-        return true;
+        return this._localRepo.add(name);
     }
     commit(message){
-        if (!this.isCheckouted()){
-            console.log("체크아웃을 먼저 해주세요.");
-            return false;
-        }
-        
-        this._curLocalRepo.commit(message);
-        
-        return true;
+        return this._localRepo.commit(message);
     }
     log(){
-        if (!this.isCheckouted()){
-            console.log("체크아웃을 먼저 해주세요.");
-            return false;
-        }
-        
-        this._curLocalRepo.printRepository();
-    }
-    push(){
-        if (!this.isCheckouted()){
-            console.log("체크아웃을 먼저 해주세요.");
-            return false;
-        }
-        
-        console.log("push some commits...");
-        
-        this._curLocalRepo.push();
-        
-    }
-    export(){
-        if (!this.isCheckouted()){
-            console.log("체크아웃을 먼저 해주세요.");
-            return false;
-        }
-        
-        this._curLocalRepo.export();
-    }
-    // 현재 체크아웃된 레포지토리 이름을 반환
-    getCurLocalRepoName() {
-        if (this._curLocalRepo === null)
-            return "";
-        return this._curLocalRepo.getName();
-    }
-    // 현재 체크아웃된 상태인지 반환
-    isCheckouted(){
-        return this._curLocalRepo !== null;
+        return this._localRepo.printRepository();
     }
 }
 
