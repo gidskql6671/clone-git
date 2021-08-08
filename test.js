@@ -1,7 +1,7 @@
-const Git = require("./git.js");
+// const Git = require("./git.js");
 
-const git = new Git({localPath: "challenge-day9/local"});
+// const git = new Git({localPath: "challenge-day9/local"});
 
-git.checkout("test");
+// git.checkout("test");
 
-git.status();
+// git.status();

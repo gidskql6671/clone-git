@@ -3,6 +3,7 @@ const fs = require('fs');
 const { hash } = require('./hash.js');
 require('colors');
 
+const pathSep = /\/|\\/;
 
 class Local{
     constructor({curDir = ".", gitName = ".mygit"}){
@@ -62,20 +63,20 @@ class Local{
         return this._makeTreeRecurs(indexArray);
     }
     _makeTreeRecurs(indexArray, dirname = "", pos = 0){
-        const blobList = indexArray.filter(({filename}) => filename.split(path.sep).length === pos + 1)
+        const blobList = indexArray.filter(({filename}) => filename.split(pathSep).length === pos + 1)
                             .filter(({filename}) => filename.startsWith(dirname));
-        const treeList = indexArray.filter(({filename}) => filename.split(path.sep).length > pos + 1);
+        const treeList = indexArray.filter(({filename}) => filename.split(pathSep).length > pos + 1);
         let content = ``;
         
         const blobContent = blobList.map(({filename, blobId}) => {
-            const file = filename.split(path.sep).slice(-1)[0];
+            const file = filename.split(pathSep).slice(-1)[0];
             
             return `blob ${blobId} ${file}`;
         });
         
         
         const treeObjectArray = treeList.map(({filename, blobId}) => {
-            const firstDir = filename.split(path.sep).slice(0, pos + 1).join(path.sep);
+            const firstDir = filename.split(pathSep).slice(0, pos + 1).join(path.path.sep);
             
             const treeId = this._makeTreeRecurs(indexArray, `${dirname}${firstDir}/`, pos + 1);
             
@@ -152,8 +153,8 @@ class Local{
        
         const data = fs.readFileSync(objectPath, 'utf-8');
         let dirname = "";
-        if (filename.split(path.sep).length > 1){
-            dirname = filename.split(path.sep)[0];
+        if (filename.split(pathSep).length > 1){
+            dirname = filename.split(pathSep)[0];
         }
         let blobId = null;
         
@@ -174,7 +175,7 @@ class Local{
             }
             else{
                 if (dirname === filename){
-                    this._getBlobIdFromTreeByFilename(objectId, filename.split(path.sep).slice(1).join(path.sep));
+                    this._getBlobIdFromTreeByFilename(objectId, filename.split(pathSep).slice(1).join(path.sep));
                 }
             }
         })
