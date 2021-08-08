@@ -43,7 +43,7 @@ class Git{
     
     status() {
         if (this._localRepo){
-            this._localRepo.printAll();
+            this._localRepo.status();
         }
         else{
             console.log("git 저장소가 없습니다.");
@@ -64,7 +64,7 @@ class Git{
         return this._localRepo.commit(message);
     }
     log(){
-        return this._localRepo.printRepository();
+        return this._localRepo.printCommitLog();
     }
 }
 
