@@ -1,3 +1,3 @@
-const vmgit = require('./vmgit.js');
+const vmgit = require('./src/vmgit.js');
 
 vmgit();

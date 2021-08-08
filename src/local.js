@@ -1,6 +1,7 @@
 const path = require('path')
 const fs = require('fs');
 const { hash } = require('./hash.js');
+require('colors');
 
 
 class Local{
@@ -359,10 +360,36 @@ class Local{
             return {filename: filename, blobId: blobId};
         })
         
-        this._status(this._curDir, indexArray)
-        .forEach(ele => {
-            console.log(`filename: ${ele.filename}, status: ${ele.status}`);
-        });
+        // 수정된 파일을 뽑아낸다.
+        const files = this._status(this._curDir, indexArray).filter(ele => ele.status !== "unmodified");
+        if (files.length === 0){
+            console.log('nothing to commit, working tree clean');
+            return true;
+        }
+        
+        // untracked와 modified를 따로 출력할 것이다.
+        const untrackedFiles = files.filter(ele => ele.status === "untracked");
+        const modifiedFiles = files.filter(ele => ele.status !== "untracked");
+        
+        if (modifiedFiles.length >= 0){
+            console.log(`Changes not staged for commit:`);
+            console.log(`  (use "git add/rm <file>..." to update what will be committed)`);
+            console.log(`  (use "git restore <file>..." to discard changes in working directory)`);
+            modifiedFiles.forEach(ele => {
+                const statusStr = `${ele.stauts}:`.padEnd(11, " ");
+                console.log(`\t${statusStr} ${ele.filename}`.red);
+            });
+        }
+        if (untrackedFiles.length > 0){
+            console.log(`Untracked files:\n  (use "git add <file>..." to include in what will be committed)`);
+            untrackedFiles.forEach(ele => {
+                // nodejs 자체의 색입히는 기능
+                // console.log(`\u001b[31${ele.filename}\u001b[0`);
+                // 바퀴를 다시 발명하지 말자.
+                console.log(`\t${ele.filename}`.red);
+            });
+            console.log(`\nno changes added to commit (use "git add" and/or "git commit -a")`);
+        }
     }
     _status(dirname, indexArray){
         const files = fs.readdirSync(dirname, {withFileTypes: true, encoding: 'utf-8'});
@@ -399,51 +426,8 @@ class Local{
             }
         })
     }
-    
-    printAll(){
-        this.printWorkingDir();
-        console.log("");
-        this.printStagingArea();
-        console.log("");
-        this.printRepository();
-    }
-    printWorkingDir(){
-        console.log("---Working Directory/");
-        // this._printWorkingDir();
-        this.status();
-    }
-    _printWorkingDir(dirname = "./"){
-        const files = fs.readdirSync(path.join(this._curDir, dirname), {encoding: 'utf-8', withFileTypes: true});
-        
-        files.filter(({name}) => name !== ".git")
-        .forEach(file => {
-            const filename = file.name;
-            
-            if (!file.isDirectory()){
-                const stat = fs.statSync(path.join(this._curDir, dirname, filename));
-                console.log(`${dirname.slice(2)}${filename}(${stat.size}) ${stat.mtime}`);
-            }
-            else{
-                this._printWorkingDir(`${dirname}${filename}/`);
-            }
-        })
-    }
-    
-    printStagingArea(){
-        console.log("---Staging Area/");
-        this._getStringFromIndex().split("\n")
-        .forEach(line => {
-            const array = line.split(" ");
-            const filename = array.slice(0, -1).join(" ");
-            const blobId = array[array.length - 1];
-            
-            const stat = fs.statSync(path.join(this._objectsDir, blobId.substring(0,2), blobId.substring(2)));
-            console.log(`${filename}(${stat.size}) ${stat.mtime}`);
-        })
-        
-    }
-    printRepository(){
-        console.log("---Git Repository/");
+    printCommitLog(){
+        console.log("--- Commit Logs ---");
         const lastCommitId = this._getLastCommitId();
         
         if (lastCommitId !== ""){
@@ -462,19 +446,6 @@ class Local{
         
         if (parent !== "")
             this._printCommitLog(parent);
-    }
-    
-    printRemote(){
-        console.log("미구현");
-        return true;
-    }
-    push(){
-        console.log("미구현");
-        return true;
-    }
-    export(){
-        console.log("미구현");
-        return true;
     }
 }
 
