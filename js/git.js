@@ -1,3 +1,3 @@
-const git = require('./src/vmgit.js');
+import git from './src/git.js';
 
 git();

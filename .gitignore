@@ -1,3 +1,4 @@
 .mygit/
 node_modules/
 test.js
+.vscode/
