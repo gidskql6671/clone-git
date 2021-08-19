@@ -1,4 +1,3 @@
-const io = require("./console_io.js");
 const Git = require("./git.js");
 
 

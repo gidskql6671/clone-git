@@ -1,7 +1,3 @@
-// const Git = require("./git.js");
+import path from "path";
 
-// const git = new Git({localPath: "challenge-day9/local"});
-
-// git.checkout("test");
-
-// git.status();
+console.log(path.resolve())
